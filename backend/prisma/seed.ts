@@ -6,15 +6,22 @@ const prisma = new PrismaClient();
 async function main() {
   console.log("Seeding database...");
 
+  // 1. Limpiamos los datos viejos para evitar conflictos de claves duplicadas (P2002)
+  // El orden importa por las claves foráneas (primero tareas, después tableros, después usuarios)
+  await prisma.task.deleteMany({});
+  await prisma.board.deleteMany({});
+  await prisma.user.deleteMany({});
+  // Las categorías las dejamos o usamos createMany con skipDuplicates
+
   // Create admin user
   const hashedPassword = await bcrypt.hash("admin123", 10);
 
   const admin = await prisma.user.upsert({
-    where: { email: "admin@taskflow.com" },
+    where: { email: "admin@lumina.com" },
     update: {},
     create: {
       username: "admin",
-      email: "admin@taskflow.com",
+      email: "admin@lumina.com",
       password: hashedPassword,
       role: Role.ADMIN,
     },
@@ -24,11 +31,11 @@ async function main() {
   const userPassword = await bcrypt.hash("user123", 10);
 
   const user = await prisma.user.upsert({
-    where: { email: "user@taskflow.com" },
+    where: { email: "user@lumina.com" },
     update: {},
     create: {
       username: "testuser",
-      email: "user@taskflow.com",
+      email: "user@lumina.com",
       password: userPassword,
       role: Role.USER,
     },

@@ -58,41 +58,45 @@ export function Sidebar() {
       transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
       className="relative shrink-0 flex flex-col bg-bg-surface border-r border-bg-border h-screen sticky top-0 overflow-hidden"
     >
-      {/* Header */}
-      <div className="flex items-center justify-between px-3 py-4 border-b border-bg-border shrink-0">
+    {/* Header */}
+      <div className={clsx(
+        "flex border-b border-bg-border shrink-0 px-3 py-4",
+        collapsed ? "flex-col items-center gap-4" : "items-center justify-between"
+      )}>
         <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-7 h-7 shrink-0 rounded-lg overflow-hidden">
-            <img src="/logo.png" alt="Lumina" className="w-full h-full object-contain" />
-          </div>
-          <AnimatePresence>
-            {!collapsed && (
-              <motion.span
-                initial={{ opacity: 0, x: -6 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -6 }}
-                transition={{ duration: 0.15 }}
-                className="text-sm font-bold text-text-primary tracking-tight whitespace-nowrap"
-              >
-                Lumina
-              </motion.span>
-            )}
-          </AnimatePresence>
+          {collapsed ? (
+            /* ✅ MODO COLAPSADO: La L centrada */
+            <div className="shrink-0 flex items-center justify-center">
+              <img 
+                src="/favicon.png" 
+                alt="Lumina L" 
+                className="w-9 h-9 object-contain" 
+              />
+            </div>
+          ) : (
+            /* ✅ MODO EXPANDIDO: Logo completo */
+            <div className="w-35 h-20 shrink-0 rounded-lg overflow-hidden flex items-center">
+              <img 
+                src="/logo.png" 
+                alt="Lumina Logo" 
+                className="w-full h-full object-contain" 
+              />
+            </div>
+          )}
         </div>
+        
+        {/* ✅ BOTÓN CORREGIDO: Ahora nunca se oculta, cambia de posición según el estado */}
         <button
           onClick={() => setCollapsed(!collapsed)}
-          className={clsx(
-            'p-1 rounded-md text-text-muted hover:text-text-primary hover:bg-bg-elevated transition-colors shrink-0',
-            collapsed && 'mx-auto'
-          )}
+          className="p-1 rounded-md text-text-muted hover:text-text-primary hover:bg-bg-elevated transition-colors shrink-0"
         >
           {collapsed ? (
-            <ChevronRight className="w-3.5 h-3.5" />
+            <ChevronRight className="w-4 h-4" />
           ) : (
             <ChevronLeft className="w-3.5 h-3.5" />
           )}
         </button>
       </div>
-
       {/* Workspace switcher */}
       {!collapsed && (
         <div className="px-3 py-2.5 border-b border-bg-border shrink-0">
