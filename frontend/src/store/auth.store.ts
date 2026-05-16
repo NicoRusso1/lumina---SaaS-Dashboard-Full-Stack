@@ -6,13 +6,14 @@ interface AuthStore {
   token: string | null
   isAuthenticated: boolean
   setAuth: (user: User, token: string) => void
+  updateUser: (updates: Partial<User>) => void
   logout: () => void
 }
 
 const storedUser = localStorage.getItem('lumina_user')
 const storedToken = localStorage.getItem('lumina_token')
 
-export const useAuthStore = create<AuthStore>((set) => ({
+export const useAuthStore = create<AuthStore>((set, get) => ({
   user: storedUser ? JSON.parse(storedUser) : null,
   token: storedToken || null,
   isAuthenticated: !!storedToken,
@@ -21,6 +22,14 @@ export const useAuthStore = create<AuthStore>((set) => ({
     localStorage.setItem('lumina_token', token)
     localStorage.setItem('lumina_user', JSON.stringify(user))
     set({ user, token, isAuthenticated: true })
+  },
+
+  updateUser: (updates) => {
+    const current = get().user
+    if (!current) return
+    const updated = { ...current, ...updates }
+    localStorage.setItem('lumina_user', JSON.stringify(updated))
+    set({ user: updated })
   },
 
   logout: () => {

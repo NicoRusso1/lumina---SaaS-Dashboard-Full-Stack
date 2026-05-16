@@ -1,5 +1,5 @@
 import { Task } from '../../types'
-import { PriorityBadge } from '../ui/PriorityBadge'
+import { PriorityBadge } from '../ui/Badge'
 import clsx from 'clsx'
 
 interface TaskCardProps {

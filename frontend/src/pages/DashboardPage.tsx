@@ -1,217 +1,246 @@
-import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useState, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { motion } from 'framer-motion'
+import { useAuthStore } from '../store/auth.store'
 import { boardService } from '../services/board.service'
 import { taskService } from '../services/task.service'
-import { Board, Task } from '../types'
-import { useAuthStore } from '../store/auth.store'
-import { StatSkeleton, BoardSkeleton } from '../components/ui/Skeleton'
-import { PriorityBadge } from '../components/ui/PriorityBadge'
-import { EmptyState } from '../components/ui/EmptyState'
+import { Board, Task, ActivityItem } from '../types'
+import { StatsCard } from '../components/dashboard/StatsCard'
+import { WeeklyAreaChart, DonutChart, ActivityBarChart } from '../components/dashboard/Charts'
+import { ActivityFeed } from '../components/dashboard/ActivityFeed'
+import { DashboardSkeleton } from '../components/ui/Skeleton'
+import { Button } from '../components/ui/Button'
+import { Columns3, CheckSquare, Timer, Flame, ArrowRight, Zap, TrendingUp, StickyNote, Target } from 'lucide-react'
+
+function getGreeting() {
+  const h = new Date().getHours()
+  if (h < 12) return 'Good morning'
+  if (h < 17) return 'Good afternoon'
+  return 'Good evening'
+}
+
+function generateWeeklyData(tasks: Task[]) {
+  const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+  const now = new Date()
+  return days.map((day, i) => {
+    const dayTasks = tasks.filter((t) => {
+      const d = new Date(t.createdAt)
+      const diff = Math.floor((now.getTime() - d.getTime()) / (1000 * 60 * 60 * 24))
+      return diff === i
+    })
+    return { day, completed: dayTasks.filter((t) => t.completed).length, created: dayTasks.length }
+  })
+}
+
+function generateActivity(boards: Board[], tasks: Task[]): ActivityItem[] {
+  const items: ActivityItem[] = []
+  boards.slice(0, 3).forEach((b) => {
+    items.push({ id: `board-${b.id}`, type: 'board_created', message: `Created board "${b.title}"`, time: b.createdAt })
+  })
+  tasks.slice(0, 6).forEach((t) => {
+    items.push({
+      id: `task-${t.id}`,
+      type: t.completed ? 'task_completed' : 'task_created',
+      message: t.completed ? `Completed "${t.title}"` : `Created "${t.title}"`,
+      time: t.createdAt,
+    })
+  })
+  return items.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime()).slice(0, 8)
+}
 
 export function DashboardPage() {
   const { user } = useAuthStore()
+  const navigate = useNavigate()
   const [boards, setBoards] = useState<Board[]>([])
-  const [recentTasks, setRecentTasks] = useState<Task[]>([])
+  const [tasks, setTasks] = useState<Task[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const load = async () => {
+    const fetchAll = async () => {
       try {
-        const bs = await boardService.getAll()
-        setBoards(bs)
-
-        // Grab tasks from the first 2 boards
-        if (bs.length > 0) {
-          const taskArrays = await Promise.all(
-            bs.slice(0, 2).map((b) => taskService.getByBoard(b.id))
-          )
-          const allTasks = taskArrays.flat().slice(0, 6)
-          setRecentTasks(allTasks)
-        }
+        const boardsData = await boardService.getAll()
+        setBoards(boardsData)
+        const results = await Promise.all(
+          boardsData.slice(0, 6).map((b) => taskService.getByBoard(b.id).catch(() => [] as Task[]))
+        )
+        setTasks(results.flat())
       } catch {
         // silent
       } finally {
         setLoading(false)
       }
     }
-    load()
+    fetchAll()
   }, [])
 
-  const totalTasks = recentTasks.length
-  const completedTasks = recentTasks.filter((t) => t.completed).length
-  const pendingTasks = recentTasks.filter((t) => !t.completed).length
-  const highPriority = recentTasks.filter((t) => t.priority === 'HIGH' && !t.completed).length
+  const completedTasks = tasks.filter((t) => t.completed)
+  const pendingTasks = tasks.filter((t) => !t.completed)
+  const highPriority = tasks.filter((t) => t.priority === 'HIGH' && !t.completed)
+  const completionRate = tasks.length > 0 ? Math.round((completedTasks.length / tasks.length) * 100) : 0
 
-  const stats = [
-    { label: 'Total boards', value: boards.length, color: 'text-violet' },
-    { label: 'Recent tasks', value: totalTasks, color: 'text-text-primary' },
-    { label: 'Completed', value: completedTasks, color: 'text-emerald-400' },
-    { label: 'High priority', value: highPriority, color: 'text-red-400' },
+  const weeklyData = useMemo(() => generateWeeklyData(tasks), [tasks])
+  const activity = useMemo(() => generateActivity(boards, tasks), [boards, tasks])
+
+  const donutData = [
+    { name: 'Completed', value: completedTasks.length, color: '#22c55e' },
+    { name: 'Pending', value: pendingTasks.length, color: '#7c6af7' },
+    { name: 'High priority', value: highPriority.length, color: '#ef4444' },
   ]
 
+  if (loading) {
+    return (
+      <div className="p-6 lg:p-8">
+        <DashboardSkeleton />
+      </div>
+    )
+  }
+
   return (
-    <div className="px-8 py-8 max-w-5xl mx-auto animate-fade-in">
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-2xl font-semibold text-text-primary">
-          Good {getGreeting()},{' '}
-          <span className="text-text-accent">{user?.username}</span>
-        </h1>
-        <p className="text-sm text-text-secondary mt-1">
-          Here's what's happening with your work today.
-        </p>
-      </div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
-        {loading
-          ? Array.from({ length: 4 }).map((_, i) => <StatSkeleton key={i} />)
-          : stats.map((stat) => (
-              <div
-                key={stat.label}
-                className="p-5 bg-bg-surface border border-bg-border rounded-xl hover:border-violet/20 transition-colors"
-              >
-                <p className="text-xs text-text-secondary mb-1">{stat.label}</p>
-                <p className={`text-3xl font-semibold ${stat.color}`}>{stat.value}</p>
-              </div>
-            ))}
-      </div>
-
-      <div className="grid md:grid-cols-2 gap-6">
-        {/* Recent boards */}
+    <div className="p-6 lg:p-8 space-y-7 max-w-7xl">
+      {/* Hero */}
+      <motion.div
+        initial={{ opacity: 0, y: -8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+        className="flex flex-col sm:flex-row sm:items-end justify-between gap-4"
+      >
         <div>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-text-primary">Recent Boards</h2>
-            <Link
-              to="/boards"
-              className="text-xs text-text-secondary hover:text-text-accent transition-colors"
-            >
-              View all →
-            </Link>
+          <div className="flex items-center gap-2 mb-2">
+            <Flame className="w-4 h-4 text-warning" />
+            <span className="text-xs text-text-muted font-medium">
+              {completionRate}% completion rate
+            </span>
           </div>
-
-          <div className="space-y-2">
-            {loading ? (
-              Array.from({ length: 3 }).map((_, i) => <BoardSkeleton key={i} />)
-            ) : boards.length === 0 ? (
-              <EmptyState
-                title="No boards yet"
-                description="Create your first board to get started."
-              />
-            ) : (
-              boards.slice(0, 4).map((board) => (
-                <Link
-                  key={board.id}
-                  to={`/boards/${board.id}`}
-                  className="flex items-center justify-between p-4 bg-bg-surface border border-bg-border rounded-xl hover:border-violet/30 hover:bg-bg-elevated transition-all group"
-                >
-                  <div>
-                    <p className="text-sm font-medium text-text-primary group-hover:text-text-accent transition-colors">
-                      {board.title}
-                    </p>
-                    <p className="text-xs text-text-muted mt-0.5">
-                      {board._count?.tasks ?? 0} tasks
-                    </p>
-                  </div>
-                  <svg
-                    className="w-4 h-4 text-text-muted group-hover:text-text-accent transition-colors"
-                    viewBox="0 0 16 16"
-                    fill="none"
-                  >
-                    <path
-                      d="M6 12l4-4-4-4"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                </Link>
-              ))
-            )}
-          </div>
-        </div>
-
-        {/* Recent tasks */}
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-text-primary">Recent Tasks</h2>
-            <Link
-              to="/tasks"
-              className="text-xs text-text-secondary hover:text-text-accent transition-colors"
-            >
-              View all →
-            </Link>
-          </div>
-
-          <div className="space-y-2">
-            {loading ? (
-              Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="h-14 bg-bg-surface border border-bg-border rounded-xl animate-skeleton" />
-              ))
-            ) : recentTasks.length === 0 ? (
-              <EmptyState title="No tasks yet" description="Tasks from your boards will appear here." />
-            ) : (
-              recentTasks.slice(0, 5).map((task) => (
-                <div
-                  key={task.id}
-                  className="flex items-center gap-3 p-3 bg-bg-surface border border-bg-border rounded-xl"
-                >
-                  <div
-                    className={`w-4 h-4 shrink-0 rounded-full border-2 flex items-center justify-center ${
-                      task.completed
-                        ? 'bg-emerald-400 border-emerald-400'
-                        : 'border-bg-border'
-                    }`}
-                  >
-                    {task.completed && (
-                      <svg className="w-2.5 h-2.5 text-white" viewBox="0 0 10 10" fill="none">
-                        <path d="M2 5l2.5 2.5 3.5-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                    )}
-                  </div>
-                  <p
-                    className={`flex-1 text-sm truncate ${
-                      task.completed ? 'line-through text-text-muted' : 'text-text-primary'
-                    }`}
-                  >
-                    {task.title}
-                  </p>
-                  <PriorityBadge priority={task.priority} />
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Completion bar */}
-      {!loading && totalTasks > 0 && (
-        <div className="mt-8 p-5 bg-bg-surface border border-bg-border rounded-xl">
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-sm font-medium text-text-primary">Recent progress</p>
-            <p className="text-xs text-text-secondary">
-              {completedTasks}/{totalTasks} tasks
-            </p>
-          </div>
-          <div className="h-2 bg-bg-elevated rounded-full overflow-hidden">
-            <div
-              className="h-full bg-violet rounded-full transition-all duration-700"
-              style={{ width: `${totalTasks ? (completedTasks / totalTasks) * 100 : 0}%` }}
-            />
-          </div>
-          <p className="text-xs text-text-secondary mt-2">
-            {pendingTasks} task{pendingTasks !== 1 ? 's' : ''} still pending
+          <h1 className="text-2xl lg:text-3xl font-bold text-text-primary">
+            {getGreeting()},{' '}
+            <span className="text-gradient-violet">{user?.username}</span> 👋
+          </h1>
+          <p className="text-sm text-text-secondary mt-1.5">
+            You have{' '}
+            <span className="text-text-primary font-semibold">{pendingTasks.length} tasks</span>{' '}
+            pending across{' '}
+            <span className="text-text-primary font-semibold">{boards.length} boards</span>.
           </p>
         </div>
-      )}
+        <div className="flex items-center gap-2 shrink-0">
+          <Button
+            variant="outline"
+            size="sm"
+            icon={<Timer className="w-3.5 h-3.5" />}
+            onClick={() => navigate('/focus')}
+          >
+            Focus mode
+          </Button>
+          <Button
+            size="sm"
+            icon={<Zap className="w-3.5 h-3.5" />}
+            onClick={() => navigate('/boards')}
+          >
+            New board
+          </Button>
+        </div>
+      </motion.div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
+        <StatsCard title="Total Tasks" value={tasks.length} icon={<CheckSquare className="w-4 h-4" />} trend={12} subtitle="vs last week" accent="violet" delay={0} />
+        <StatsCard title="Completed" value={completedTasks.length} icon={<Target className="w-4 h-4" />} trend={8} subtitle="vs last week" accent="success" delay={0.05} />
+        <StatsCard title="Active Boards" value={boards.length} icon={<Columns3 className="w-4 h-4" />} accent="info" subtitle="workspaces" delay={0.1} />
+        <StatsCard title="Completion" value={`${completionRate}%`} icon={<TrendingUp className="w-4 h-4" />} trend={completionRate - 65} subtitle="vs average" accent="warning" delay={0.15} />
+      </div>
+
+      {/* Charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2, duration: 0.3 }}
+          className="lg:col-span-2 p-5 bg-bg-surface border border-bg-border rounded-xl"
+        >
+          <div className="flex items-center justify-between mb-5">
+            <div>
+              <h3 className="text-sm font-semibold text-text-primary">Weekly Activity</h3>
+              <p className="text-xs text-text-secondary mt-0.5">Tasks created vs completed</p>
+            </div>
+            <div className="flex items-center gap-4 text-[10px] text-text-muted">
+              <span className="flex items-center gap-1.5"><span className="w-3 h-0.5 bg-violet rounded inline-block" />Completed</span>
+              <span className="flex items-center gap-1.5"><span className="w-3 h-0.5 bg-info rounded inline-block opacity-60" />Created</span>
+            </div>
+          </div>
+          <WeeklyAreaChart data={weeklyData} />
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.25, duration: 0.3 }}
+          className="p-5 bg-bg-surface border border-bg-border rounded-xl"
+        >
+          <div className="mb-5">
+            <h3 className="text-sm font-semibold text-text-primary">Task Status</h3>
+            <p className="text-xs text-text-secondary mt-0.5">Distribution overview</p>
+          </div>
+          {tasks.length > 0 ? (
+            <DonutChart data={donutData} />
+          ) : (
+            <div className="flex items-center justify-center h-28 text-xs text-text-muted">
+              No tasks yet
+            </div>
+          )}
+        </motion.div>
+      </div>
+
+      {/* Bottom */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3, duration: 0.3 }}
+          className="lg:col-span-2 bg-bg-surface border border-bg-border rounded-xl overflow-hidden"
+        >
+          <div className="flex items-center justify-between px-5 py-4 border-b border-bg-border">
+            <h3 className="text-sm font-semibold text-text-primary">Recent Activity</h3>
+            <span className="text-xs text-text-muted">{activity.length} events</span>
+          </div>
+          <div className="p-2">
+            <ActivityFeed items={activity} />
+          </div>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.35, duration: 0.3 }}
+          className="space-y-3"
+        >
+          <div className="p-4 bg-bg-surface border border-bg-border rounded-xl">
+            <h3 className="text-xs font-semibold text-text-secondary uppercase tracking-wider mb-3">Quick Actions</h3>
+            <div className="space-y-1">
+              {[
+                { label: 'View all boards', to: '/boards', Icon: Columns3 },
+                { label: 'All tasks', to: '/tasks', Icon: CheckSquare },
+                { label: 'Start Pomodoro', to: '/focus', Icon: Timer },
+                { label: 'Write a note', to: '/notes', Icon: StickyNote },
+              ].map(({ label, to, Icon }) => (
+                <button
+                  key={to}
+                  onClick={() => navigate(to)}
+                  className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-xs text-text-secondary hover:text-text-primary hover:bg-bg-elevated transition-colors group"
+                >
+                  <Icon className="w-3.5 h-3.5 text-violet shrink-0" />
+                  <span className="flex-1 text-left">{label}</span>
+                  <ArrowRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="p-4 bg-bg-surface border border-bg-border rounded-xl">
+            <h3 className="text-xs font-semibold text-text-secondary uppercase tracking-wider mb-3">Daily Output</h3>
+            <ActivityBarChart data={weeklyData.map((d) => ({ day: d.day, tasks: d.completed }))} />
+          </div>
+        </motion.div>
+      </div>
     </div>
   )
-}
-
-function getGreeting() {
-  const h = new Date().getHours()
-  if (h < 12) return 'morning'
-  if (h < 17) return 'afternoon'
-  return 'evening'
 }

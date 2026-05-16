@@ -9,42 +9,32 @@ import { DashboardPage } from './pages/DashboardPage'
 import { BoardsPage } from './pages/BoardsPage'
 import { BoardDetailPage } from './pages/BoardDetailPage'
 import { TasksPage } from './pages/TasksPage'
+import { KanbanPage } from './pages/KanbanPage'
+import { FocusPage } from './pages/FocusPage'
+import { NotesPage } from './pages/NotesPage'
+import { CalendarPage } from './pages/CalendarPage'
+import { ProfilePage } from './pages/ProfilePage'
 
 export default function App() {
   return (
     <ToastProvider>
       <BrowserRouter>
         <Routes>
-          {/* Public routes */}
-          <Route
-            path="/login"
-            element={
-              <PublicRoute>
-                <LoginPage />
-              </PublicRoute>
-            }
-          />
-          <Route
-            path="/register"
-            element={
-              <PublicRoute>
-                <RegisterPage />
-              </PublicRoute>
-            }
-          />
+          {/* Public */}
+          <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
+          <Route path="/register" element={<PublicRoute><RegisterPage /></PublicRoute>} />
 
-          {/* Protected routes */}
-          <Route
-            element={
-              <ProtectedRoute>
-                <AppLayout />
-              </ProtectedRoute>
-            }
-          >
+          {/* Protected */}
+          <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/boards" element={<BoardsPage />} />
             <Route path="/boards/:id" element={<BoardDetailPage />} />
             <Route path="/tasks" element={<TasksPage />} />
+            <Route path="/kanban" element={<KanbanPage />} />
+            <Route path="/focus" element={<FocusPage />} />
+            <Route path="/notes" element={<NotesPage />} />
+            <Route path="/calendar" element={<CalendarPage />} />
+            <Route path="/profile" element={<ProfilePage />} />
           </Route>
 
           {/* Redirects */}
