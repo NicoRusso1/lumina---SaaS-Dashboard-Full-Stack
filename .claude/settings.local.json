@@ -3,7 +3,10 @@
     "allow": [
       "Bash(cd /c/Users/nicor/Desktop/workspace/lumina && pwd && ls -la)",
       "Bash(npm install *)",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git add *)",
+      "Bash(git commit -m 'chore: update Claude Code settings *)"
     ]
   }
 }
