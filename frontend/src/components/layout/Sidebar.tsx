@@ -61,8 +61,8 @@ export function Sidebar() {
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-4 border-b border-bg-border shrink-0">
         <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-7 h-7 shrink-0 rounded-lg gradient-violet flex items-center justify-center shadow-glow-sm">
-            <Zap className="w-3.5 h-3.5 text-white" strokeWidth={2.5} />
+          <div className="w-7 h-7 shrink-0 rounded-lg overflow-hidden">
+            <img src="/logo.png" alt="Lumina" className="w-full h-full object-contain" />
           </div>
           <AnimatePresence>
             {!collapsed && (
