@@ -1,72 +1,166 @@
 import { useEffect, useState } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { boardService } from '../services/board.service'
 import { taskService } from '../services/task.service'
 import { Board, Task, Priority } from '../types'
 import { useToast } from '../context/ToastContext'
 import { Button } from '../components/ui/Button'
-import { TaskCard } from '../components/tasks/TaskCard'
-import { TaskFormModal } from '../components/tasks/TaskFormModal'
-import { TaskSkeleton } from '../components/ui/Skeleton'
+import { Modal } from '../components/ui/Modal'
 import { EmptyState } from '../components/ui/EmptyState'
+import { PriorityBadge } from '../components/ui/Badge'
+import { TaskSkeleton } from '../components/ui/Skeleton'
+import { Plus, CheckSquare, MoreHorizontal, Edit3, Trash2 } from 'lucide-react'
 import clsx from 'clsx'
 
 type Filter = 'all' | 'active' | 'completed'
-type PriorityFilter = 'all' | Priority
+type PrioFilter = 'any' | Priority
+
+function TaskRow({
+  task,
+  onToggle,
+  onEdit,
+  onDelete,
+}: {
+  task: Task
+  onToggle: () => void
+  onEdit: () => void
+  onDelete: () => void
+}) {
+  const [menuOpen, setMenuOpen] = useState(false)
+
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, height: 0 }}
+      className="group flex items-center gap-3 px-4 py-3 hover:bg-bg-elevated/50 transition-colors rounded-xl border border-transparent hover:border-bg-border"
+    >
+      <button
+        onClick={onToggle}
+        className={clsx(
+          'w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all',
+          task.completed
+            ? 'bg-success border-success text-white'
+            : 'border-bg-border hover:border-violet/50'
+        )}
+      >
+        {task.completed && (
+          <svg className="w-2.5 h-2.5" viewBox="0 0 10 10" fill="none">
+            <path d="M2 5l2.5 2.5 3.5-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        )}
+      </button>
+
+      <div className="flex-1 min-w-0">
+        <p className={clsx('text-sm truncate transition-colors', task.completed ? 'text-text-muted line-through' : 'text-text-primary')}>
+          {task.title}
+        </p>
+        {task.description && (
+          <p className="text-xs text-text-muted truncate mt-0.5">{task.description}</p>
+        )}
+      </div>
+
+      <PriorityBadge priority={task.priority} />
+
+      <div className="relative">
+        <button
+          onClick={() => setMenuOpen(!menuOpen)}
+          className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-bg-overlay transition-colors opacity-0 group-hover:opacity-100"
+        >
+          <MoreHorizontal className="w-3.5 h-3.5" />
+        </button>
+        {menuOpen && (
+          <>
+            <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
+            <div className="absolute right-0 top-full mt-1 w-32 bg-bg-elevated border border-bg-border rounded-xl shadow-modal z-20 overflow-hidden py-1">
+              <button
+                onClick={() => { onEdit(); setMenuOpen(false) }}
+                className="w-full flex items-center gap-2 px-3 py-2 text-xs text-text-secondary hover:text-text-primary hover:bg-bg-overlay"
+              >
+                <Edit3 className="w-3.5 h-3.5" /> Edit
+              </button>
+              <button
+                onClick={() => { onDelete(); setMenuOpen(false) }}
+                className="w-full flex items-center gap-2 px-3 py-2 text-xs text-danger hover:bg-danger/8"
+              >
+                <Trash2 className="w-3.5 h-3.5" /> Delete
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </motion.div>
+  )
+}
 
 export function TasksPage() {
+  const { toast } = useToast()
   const [boards, setBoards] = useState<Board[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
-  const [selectedBoard, setSelectedBoard] = useState<Board | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [tasksLoading, setTasksLoading] = useState(false)
-  const [showModal, setShowModal] = useState(false)
-  const [editTask, setEditTask] = useState<Task | null>(null)
-  const [saving, setSaving] = useState(false)
+  const [activeBoard, setActiveBoard] = useState<number | null>(null)
   const [filter, setFilter] = useState<Filter>('all')
-  const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>('all')
-  const { toast } = useToast()
+  const [prioFilter, setPrioFilter] = useState<PrioFilter>('any')
+  const [loading, setLoading] = useState(true)
+  const [modalOpen, setModalOpen] = useState(false)
+  const [editTask, setEditTask] = useState<Task | null>(null)
+  const [taskTitle, setTaskTitle] = useState('')
+  const [taskDesc, setTaskDesc] = useState('')
+  const [taskPriority, setTaskPriority] = useState<Priority>('MEDIUM')
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    boardService.getAll().then((data) => {
-      setBoards(data)
-      if (data.length > 0) {
-        setSelectedBoard(data[0])
+    const fetchBoards = async () => {
+      try {
+        const data = await boardService.getAll()
+        setBoards(data)
+        if (data.length > 0) {
+          setActiveBoard(data[0].id)
+        }
+      } catch {
+        toast.error('Failed to load boards')
       }
-      setLoading(false)
-    })
+    }
+    fetchBoards()
   }, [])
 
   useEffect(() => {
-    if (!selectedBoard) return
-    setTasksLoading(true)
-    taskService
-      .getByBoard(selectedBoard.id)
+    if (!activeBoard) { setLoading(false); return }
+    setLoading(true)
+    taskService.getByBoard(activeBoard)
       .then(setTasks)
-      .finally(() => setTasksLoading(false))
-  }, [selectedBoard])
+      .catch(() => toast.error('Failed to load tasks'))
+      .finally(() => setLoading(false))
+  }, [activeBoard])
 
-  const filteredTasks = tasks.filter((t) => {
-    const statusMatch =
-      filter === 'all' ? true : filter === 'active' ? !t.completed : t.completed
-    const priorityMatch = priorityFilter === 'all' ? true : t.priority === priorityFilter
-    return statusMatch && priorityMatch
+  const filtered = tasks.filter((t) => {
+    if (filter === 'active' && t.completed) return false
+    if (filter === 'completed' && !t.completed) return false
+    if (prioFilter !== 'any' && t.priority !== prioFilter) return false
+    return true
   })
 
-  const handleSubmit = async (data: { title: string; description: string; priority: Priority }) => {
-    if (!selectedBoard) return
+  const openCreate = () => {
+    setEditTask(null); setTaskTitle(''); setTaskDesc(''); setTaskPriority('MEDIUM'); setModalOpen(true)
+  }
+  const openEdit = (task: Task) => {
+    setEditTask(task); setTaskTitle(task.title); setTaskDesc(task.description || ''); setTaskPriority(task.priority); setModalOpen(true)
+  }
+
+  const handleSave = async () => {
+    if (!taskTitle.trim() || !activeBoard) return
     setSaving(true)
     try {
       if (editTask) {
-        const updated = await taskService.update(editTask.id, data)
-        setTasks((prev) => prev.map((t) => (t.id === editTask.id ? updated : t)))
+        const updated = await taskService.update(editTask.id, { title: taskTitle.trim(), description: taskDesc, priority: taskPriority })
+        setTasks((prev) => prev.map((t) => t.id === editTask.id ? updated : t))
         toast.success('Task updated')
       } else {
-        const newTask = await taskService.create(selectedBoard.id, data)
-        setTasks((prev) => [newTask, ...prev])
+        const created = await taskService.create(activeBoard, { title: taskTitle.trim(), description: taskDesc, priority: taskPriority })
+        setTasks((prev) => [...prev, created])
         toast.success('Task created')
       }
-      setShowModal(false)
-      setEditTask(null)
+      setModalOpen(false)
     } catch {
       toast.error('Something went wrong')
     } finally {
@@ -77,166 +171,157 @@ export function TasksPage() {
   const handleToggle = async (task: Task) => {
     try {
       const updated = await taskService.update(task.id, { completed: !task.completed })
-      setTasks((prev) => prev.map((t) => (t.id === task.id ? updated : t)))
+      setTasks((prev) => prev.map((t) => t.id === task.id ? updated : t))
     } catch {
       toast.error('Failed to update task')
     }
   }
 
-  const handleEdit = (task: Task) => {
-    setEditTask(task)
-    setShowModal(true)
-  }
-
-  const handleDelete = async (task: Task) => {
-    if (!confirm('Delete this task?')) return
+  const handleDelete = async (id: number) => {
     try {
-      await taskService.remove(task.id)
-      setTasks((prev) => prev.filter((t) => t.id !== task.id))
+      await taskService.remove(id)
+      setTasks((prev) => prev.filter((t) => t.id !== id))
       toast.success('Task deleted')
     } catch {
       toast.error('Failed to delete task')
     }
   }
 
-  const openCreate = () => {
-    setEditTask(null)
-    setShowModal(true)
-  }
-
-  const statusFilters: { value: Filter; label: string }[] = [
-    { value: 'all', label: 'All' },
-    { value: 'active', label: 'Active' },
-    { value: 'completed', label: 'Done' },
-  ]
-
-  const priorityFilters: { value: PriorityFilter; label: string }[] = [
-    { value: 'all', label: 'Any priority' },
-    { value: 'HIGH', label: 'High' },
-    { value: 'MEDIUM', label: 'Medium' },
-    { value: 'LOW', label: 'Low' },
-  ]
-
   return (
-    <div className="px-8 py-8 max-w-4xl mx-auto animate-fade-in">
+    <div className="p-6 lg:p-8 max-w-4xl">
+      {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-semibold text-text-primary">Tasks</h1>
-          <p className="text-sm text-text-secondary mt-1">
-            {filteredTasks.length} task{filteredTasks.length !== 1 ? 's' : ''}
-          </p>
+          <h1 className="text-xl font-bold text-text-primary">Tasks</h1>
+          <p className="text-sm text-text-secondary mt-0.5">{filtered.length} tasks · {tasks.filter((t) => t.completed).length} completed</p>
         </div>
-        {selectedBoard && (
-          <Button onClick={openCreate}>
-            <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4">
-              <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-            </svg>
-            New task
-          </Button>
-        )}
+        <Button size="sm" icon={<Plus className="w-3.5 h-3.5" />} onClick={openCreate} disabled={!activeBoard}>
+          Add Task
+        </Button>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-3 mb-6">
-        {/* Board selector */}
-        {!loading && boards.length > 0 && (
-          <div className="flex gap-1.5 overflow-x-auto pb-1 flex-1">
-            {boards.map((b) => (
-              <button
-                key={b.id}
-                onClick={() => setSelectedBoard(b)}
-                className={clsx(
-                  'shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border',
-                  selectedBoard?.id === b.id
-                    ? 'bg-violet-subtle border-violet/30 text-text-accent'
-                    : 'border-bg-border text-text-secondary hover:text-text-primary hover:border-bg-overlay'
-                )}
-              >
-                {b.title}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/* Priority filter */}
-        <select
-          value={priorityFilter}
-          onChange={(e) => setPriorityFilter(e.target.value as PriorityFilter)}
-          className="text-xs bg-bg-elevated border border-bg-border rounded-lg px-3 py-1.5 text-text-secondary outline-none focus:border-violet/40 cursor-pointer"
-        >
-          {priorityFilters.map((p) => (
-            <option key={p.value} value={p.value}>
-              {p.label}
-            </option>
+      {/* Board tabs */}
+      {boards.length > 0 && (
+        <div className="flex gap-1 overflow-x-auto no-scrollbar pb-1 mb-4">
+          {boards.map((b) => (
+            <button
+              key={b.id}
+              onClick={() => setActiveBoard(b.id)}
+              className={clsx(
+                'shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors',
+                activeBoard === b.id
+                  ? 'bg-violet text-white'
+                  : 'text-text-secondary hover:text-text-primary bg-bg-elevated hover:bg-bg-overlay'
+              )}
+            >
+              {b.title}
+            </button>
           ))}
-        </select>
-      </div>
+        </div>
+      )}
 
-      {/* Status tabs */}
-      <div className="flex gap-1 p-1 bg-bg-surface border border-bg-border rounded-xl mb-5 w-fit">
-        {statusFilters.map((f) => (
-          <button
-            key={f.value}
-            onClick={() => setFilter(f.value)}
-            className={clsx(
-              'px-4 py-1.5 rounded-lg text-xs font-medium transition-all',
-              filter === f.value
-                ? 'bg-bg-elevated text-text-primary shadow-card'
-                : 'text-text-muted hover:text-text-secondary'
-            )}
-          >
-            {f.label}
-          </button>
-        ))}
+      {/* Filters */}
+      <div className="flex items-center gap-2 mb-5 flex-wrap">
+        <div className="flex gap-1 bg-bg-surface border border-bg-border rounded-lg p-1">
+          {(['all', 'active', 'completed'] as Filter[]).map((f) => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className={clsx(
+                'px-3 py-1.5 rounded-md text-xs font-medium transition-colors capitalize',
+                filter === f ? 'bg-bg-elevated text-text-primary' : 'text-text-muted hover:text-text-secondary'
+              )}
+            >
+              {f}
+            </button>
+          ))}
+        </div>
+        <div className="flex gap-1 bg-bg-surface border border-bg-border rounded-lg p-1">
+          {(['any', 'HIGH', 'MEDIUM', 'LOW'] as PrioFilter[]).map((p) => (
+            <button
+              key={p}
+              onClick={() => setPrioFilter(p)}
+              className={clsx(
+                'px-3 py-1.5 rounded-md text-xs font-medium transition-colors',
+                prioFilter === p ? 'bg-bg-elevated text-text-primary' : 'text-text-muted hover:text-text-secondary'
+              )}
+            >
+              {p === 'any' ? 'Any priority' : p.charAt(0) + p.slice(1).toLowerCase()}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Task list */}
-      <div className="space-y-2">
-        {tasksLoading ? (
-          Array.from({ length: 4 }).map((_, i) => <TaskSkeleton key={i} />)
-        ) : !selectedBoard ? (
-          <EmptyState
-            title="No boards yet"
-            description="Create a board first, then add tasks to it."
-          />
-        ) : filteredTasks.length === 0 ? (
-          <EmptyState
-            icon={
-              <svg viewBox="0 0 16 16" fill="none" className="w-6 h-6">
-                <path d="M3 4h10M3 8h7M3 12h5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-              </svg>
-            }
-            title={filter === 'all' ? 'No tasks yet' : `No ${filter} tasks`}
-            description={
-              filter === 'all'
-                ? 'Add your first task to get started.'
-                : undefined
-            }
-            action={
-              filter === 'all' ? (
-                <Button size="sm" onClick={openCreate}>Add a task</Button>
-              ) : undefined
-            }
-          />
-        ) : (
-          filteredTasks.map((task) => (
-            <TaskCard
-              key={task.id}
-              task={task}
-              onToggle={handleToggle}
-              onEdit={handleEdit}
-              onDelete={handleDelete}
-            />
-          ))
-        )}
-      </div>
+      {loading ? (
+        <div className="space-y-2">
+          {[...Array(5)].map((_, i) => <TaskSkeleton key={i} />)}
+        </div>
+      ) : filtered.length === 0 ? (
+        <EmptyState
+          icon={<CheckSquare className="w-6 h-6" />}
+          title="No tasks found"
+          description={filter === 'all' ? "Add your first task to get started." : `No ${filter} tasks with selected filters.`}
+          action={filter === 'all' ? <Button size="sm" icon={<Plus className="w-3.5 h-3.5" />} onClick={openCreate}>Add task</Button> : undefined}
+        />
+      ) : (
+        <div className="space-y-1">
+          <AnimatePresence>
+            {filtered.map((task) => (
+              <TaskRow
+                key={task.id}
+                task={task}
+                onToggle={() => handleToggle(task)}
+                onEdit={() => openEdit(task)}
+                onDelete={() => handleDelete(task.id)}
+              />
+            ))}
+          </AnimatePresence>
+        </div>
+      )}
 
-      <TaskFormModal
-        isOpen={showModal}
-        onClose={() => { setShowModal(false); setEditTask(null) }}
-        onSubmit={handleSubmit}
-        initialData={editTask}
-        loading={saving}
-      />
+      <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} title={editTask ? 'Edit Task' : 'New Task'} size="sm">
+        <div className="space-y-3">
+          <input
+            autoFocus
+            type="text"
+            placeholder="Task title..."
+            value={taskTitle}
+            onChange={(e) => setTaskTitle(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleSave()}
+            className="w-full bg-bg-overlay border border-bg-border rounded-lg px-3.5 py-2.5 text-sm text-text-primary placeholder:text-text-muted outline-none focus:border-violet/50 transition"
+          />
+          <textarea
+            placeholder="Description (optional)..."
+            value={taskDesc}
+            onChange={(e) => setTaskDesc(e.target.value)}
+            rows={2}
+            className="w-full bg-bg-overlay border border-bg-border rounded-lg px-3.5 py-2.5 text-sm text-text-primary placeholder:text-text-muted outline-none focus:border-violet/50 transition resize-none"
+          />
+          <div className="flex gap-1.5">
+            {(['LOW', 'MEDIUM', 'HIGH'] as Priority[]).map((p) => (
+              <button
+                key={p}
+                onClick={() => setTaskPriority(p)}
+                className={clsx(
+                  'flex-1 py-2 rounded-lg text-xs font-medium transition-colors border',
+                  taskPriority === p
+                    ? p === 'HIGH' ? 'bg-danger/15 text-danger border-danger/30' : p === 'MEDIUM' ? 'bg-warning/15 text-warning border-warning/30' : 'bg-success/15 text-success border-success/30'
+                    : 'border-bg-border text-text-muted hover:text-text-secondary hover:bg-bg-elevated'
+                )}
+              >
+                {p.charAt(0) + p.slice(1).toLowerCase()}
+              </button>
+            ))}
+          </div>
+          <div className="flex gap-2 pt-1 justify-end">
+            <Button variant="ghost" size="sm" onClick={() => setModalOpen(false)}>Cancel</Button>
+            <Button size="sm" loading={saving} onClick={handleSave} disabled={!taskTitle.trim()}>
+              {editTask ? 'Save changes' : 'Create task'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }

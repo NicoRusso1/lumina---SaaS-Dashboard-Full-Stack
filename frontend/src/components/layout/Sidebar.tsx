@@ -1,109 +1,244 @@
+import { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useAuthStore } from '../../store/auth.store'
+import { useLocalStorage } from '../../hooks/useLocalStorage'
+import { Avatar } from '../ui/Avatar'
+import { WorkspaceType } from '../../types'
 import clsx from 'clsx'
+import {
+  LayoutDashboard,
+  Columns3,
+  CheckSquare,
+  Timer,
+  StickyNote,
+  Calendar,
+  User,
+  ChevronLeft,
+  ChevronRight,
+  LogOut,
+  Zap,
+  Briefcase,
+  BookOpen,
+} from 'lucide-react'
 
 const navItems = [
-  {
-    to: '/dashboard',
-    label: 'Overview',
-    icon: (
-      <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4">
-        <rect x="2" y="2" width="5" height="5" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
-        <rect x="9" y="2" width="5" height="5" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
-        <rect x="2" y="9" width="5" height="5" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
-        <rect x="9" y="9" width="5" height="5" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
-      </svg>
-    ),
-  },
-  {
-    to: '/boards',
-    label: 'Boards',
-    icon: (
-      <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4">
-        <rect x="2" y="2" width="4" height="12" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
-        <rect x="8" y="2" width="4" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
-      </svg>
-    ),
-  },
-  {
-    to: '/tasks',
-    label: 'Tasks',
-    icon: (
-      <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4">
-        <path d="M3 4h10M3 8h7M3 12h5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-      </svg>
-    ),
-  },
+  { to: '/dashboard', label: 'Overview', icon: LayoutDashboard },
+  { to: '/boards', label: 'Boards', icon: Columns3 },
+  { to: '/kanban', label: 'Kanban', icon: Columns3 },
+  { to: '/tasks', label: 'Tasks', icon: CheckSquare },
+  { to: '/focus', label: 'Focus', icon: Timer },
+  { to: '/notes', label: 'Notes', icon: StickyNote },
+  { to: '/calendar', label: 'Calendar', icon: Calendar },
+]
+
+const workspaces = [
+  { id: 'personal' as WorkspaceType, label: 'Personal', icon: User },
+  { id: 'work' as WorkspaceType, label: 'Work', icon: Briefcase },
+  { id: 'study' as WorkspaceType, label: 'Study', icon: BookOpen },
 ]
 
 export function Sidebar() {
   const { user, logout } = useAuthStore()
   const navigate = useNavigate()
+  const [collapsed, setCollapsed] = useLocalStorage('sidebar_collapsed', false)
+  const [workspace, setWorkspace] = useLocalStorage<WorkspaceType>('active_workspace', 'personal')
+  const [showWorkspaces, setShowWorkspaces] = useState(false)
 
   const handleLogout = () => {
     logout()
     navigate('/login')
   }
 
+  const activeWs = workspaces.find((w) => w.id === workspace)!
+
   return (
-    <aside className="w-56 shrink-0 flex flex-col bg-bg-surface border-r border-bg-border h-screen sticky top-0">
-      {/* Logo */}
-      <div className="px-4 py-5 border-b border-bg-border">
-        <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-lg bg-violet flex items-center justify-center shadow-glow">
-            <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4 text-white">
-              <path d="M8 2L14 12H2L8 2Z" fill="currentColor" fillOpacity="0.9" />
-              <path d="M8 6L11 12H5L8 6Z" fill="white" fillOpacity="0.5" />
-            </svg>
+    <motion.aside
+      animate={{ width: collapsed ? 56 : 224 }}
+      transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+      className="relative shrink-0 flex flex-col bg-bg-surface border-r border-bg-border h-screen sticky top-0 overflow-hidden"
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between px-3 py-4 border-b border-bg-border shrink-0">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-7 h-7 shrink-0 rounded-lg gradient-violet flex items-center justify-center shadow-glow-sm">
+            <Zap className="w-3.5 h-3.5 text-white" strokeWidth={2.5} />
           </div>
-          <span className="text-sm font-semibold text-text-primary tracking-tight">Lumina</span>
+          <AnimatePresence>
+            {!collapsed && (
+              <motion.span
+                initial={{ opacity: 0, x: -6 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -6 }}
+                transition={{ duration: 0.15 }}
+                className="text-sm font-bold text-text-primary tracking-tight whitespace-nowrap"
+              >
+                Lumina
+              </motion.span>
+            )}
+          </AnimatePresence>
         </div>
+        <button
+          onClick={() => setCollapsed(!collapsed)}
+          className={clsx(
+            'p-1 rounded-md text-text-muted hover:text-text-primary hover:bg-bg-elevated transition-colors shrink-0',
+            collapsed && 'mx-auto'
+          )}
+        >
+          {collapsed ? (
+            <ChevronRight className="w-3.5 h-3.5" />
+          ) : (
+            <ChevronLeft className="w-3.5 h-3.5" />
+          )}
+        </button>
       </div>
 
+      {/* Workspace switcher */}
+      {!collapsed && (
+        <div className="px-3 py-2.5 border-b border-bg-border shrink-0">
+          <button
+            onClick={() => setShowWorkspaces(!showWorkspaces)}
+            className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs text-text-secondary hover:text-text-primary hover:bg-bg-elevated transition-colors"
+          >
+            <activeWs.icon className="w-3.5 h-3.5 text-violet shrink-0" />
+            <span className="flex-1 text-left font-medium">{activeWs.label}</span>
+            <ChevronRight
+              className={clsx(
+                'w-3 h-3 transition-transform duration-150',
+                showWorkspaces && 'rotate-90'
+              )}
+            />
+          </button>
+          <AnimatePresence>
+            {showWorkspaces && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.15 }}
+                className="overflow-hidden mt-1 space-y-0.5"
+              >
+                {workspaces.map((ws) => (
+                  <button
+                    key={ws.id}
+                    onClick={() => {
+                      setWorkspace(ws.id)
+                      setShowWorkspaces(false)
+                    }}
+                    className={clsx(
+                      'w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs transition-colors',
+                      workspace === ws.id
+                        ? 'bg-violet-subtle text-violet'
+                        : 'text-text-secondary hover:text-text-primary hover:bg-bg-elevated'
+                    )}
+                  >
+                    <ws.icon className="w-3 h-3" />
+                    {ws.label}
+                  </button>
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      )}
+
       {/* Nav */}
-      <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
+      <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto no-scrollbar">
         {navItems.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
+            title={collapsed ? item.label : undefined}
             className={({ isActive }) =>
               clsx(
-                'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-150',
+                'flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm transition-all duration-150 group relative',
                 isActive
-                  ? 'bg-violet-subtle text-text-accent font-medium'
+                  ? 'nav-active font-medium'
                   : 'text-text-secondary hover:text-text-primary hover:bg-bg-elevated'
               )
             }
           >
-            {item.icon}
-            {item.label}
+            {({ isActive }) => (
+              <>
+                <item.icon
+                  className={clsx('w-4 h-4 shrink-0', isActive ? 'text-violet' : '')}
+                  strokeWidth={isActive ? 2 : 1.75}
+                />
+                <AnimatePresence>
+                  {!collapsed && (
+                    <motion.span
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.1 }}
+                      className="whitespace-nowrap"
+                    >
+                      {item.label}
+                    </motion.span>
+                  )}
+                </AnimatePresence>
+                {isActive && !collapsed && (
+                  <motion.div
+                    layoutId="nav-indicator"
+                    className="absolute inset-0 rounded-lg bg-violet/8 pointer-events-none"
+                  />
+                )}
+              </>
+            )}
           </NavLink>
         ))}
       </nav>
 
-      {/* User */}
-      <div className="px-3 py-3 border-t border-bg-border">
-        <div className="flex items-center gap-2.5 px-2 py-2 rounded-lg group">
-          <div className="w-7 h-7 rounded-full bg-violet-subtle border border-violet/30 flex items-center justify-center shrink-0">
-            <span className="text-xs font-semibold text-violet">
-              {user?.username?.[0]?.toUpperCase()}
-            </span>
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-medium text-text-primary truncate">{user?.username}</p>
-            <p className="text-xs text-text-muted truncate">{user?.role}</p>
-          </div>
-          <button
-            onClick={handleLogout}
-            className="p-1 rounded-md text-text-muted hover:text-red-400 hover:bg-red-400/10 transition-colors opacity-0 group-hover:opacity-100"
-            title="Logout"
-          >
-            <svg viewBox="0 0 16 16" fill="none" className="w-3.5 h-3.5">
-              <path d="M6 2H3a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3M11 11l3-3-3-3M14 8H6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
-        </div>
+      {/* Bottom section */}
+      <div className="border-t border-bg-border px-2 py-3 space-y-1 shrink-0">
+        <NavLink
+          to="/profile"
+          title={collapsed ? 'Profile' : undefined}
+          className={({ isActive }) =>
+            clsx(
+              'flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm transition-colors',
+              isActive
+                ? 'nav-active font-medium'
+                : 'text-text-secondary hover:text-text-primary hover:bg-bg-elevated'
+            )
+          }
+        >
+          <Avatar src={user?.avatar} name={user?.username} size="xs" />
+          <AnimatePresence>
+            {!collapsed && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="flex-1 min-w-0"
+              >
+                <p className="text-xs font-medium text-text-primary truncate">{user?.username}</p>
+                <p className="text-[10px] text-text-muted">{user?.role}</p>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </NavLink>
+
+        <button
+          onClick={handleLogout}
+          title={collapsed ? 'Logout' : undefined}
+          className="w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm text-text-secondary hover:text-danger hover:bg-danger/8 transition-colors"
+        >
+          <LogOut className="w-4 h-4 shrink-0" strokeWidth={1.75} />
+          <AnimatePresence>
+            {!collapsed && (
+              <motion.span
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="whitespace-nowrap text-sm"
+              >
+                Logout
+              </motion.span>
+            )}
+          </AnimatePresence>
+        </button>
       </div>
-    </aside>
+    </motion.aside>
   )
 }
